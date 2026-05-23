@@ -113,9 +113,9 @@ env/
 .ipynb_checkpoints/
 
 # YOLO / AI
-runs/
-weights/
-*.pt
+#runs/
+#weights/
+#*.pt
 
 # Dataset cache
 .cache/
