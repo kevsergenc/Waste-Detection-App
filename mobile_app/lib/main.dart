@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
-const String geminiApiKey = 'API_KEY_BURAYA_EKLENECEK';
-
 class WasteAnalysis {
   final String title;
   final String binColor;
@@ -29,7 +27,7 @@ class WasteAnalysis {
   factory WasteAnalysis.fromCategory(String category) {
     final c = category.toLowerCase();
 
-    if (c.contains('plastik')) {
+    if (c.contains('plastik') || c.contains('plastic')) {
       return const WasteAnalysis(
         title: 'Plastik Atık',
         binColor: 'Sarı Kutu',
@@ -42,7 +40,7 @@ class WasteAnalysis {
       );
     }
 
-    if (c.contains('kağıt') || c.contains('kagit') || c.contains('karton')) {
+    if (c.contains('kağıt') || c.contains('kagit') || c.contains('karton') || c.contains('paper') || c.contains('cardboard')) {
       return const WasteAnalysis(
         title: 'Kağıt / Karton Atık',
         binColor: 'Mavi Kutu',
@@ -55,7 +53,7 @@ class WasteAnalysis {
       );
     }
 
-    if (c.contains('cam')) {
+    if (c.contains('cam') || c.contains('glass')) {
       return const WasteAnalysis(
         title: 'Cam Atık',
         binColor: 'Yeşil Kutu',
@@ -68,7 +66,7 @@ class WasteAnalysis {
       );
     }
 
-    if (c.contains('metal')) {
+    if (c.contains('metal') || c.contains('aluminum') || c.contains('aluminium')) {
       return const WasteAnalysis(
         title: 'Metal Atık',
         binColor: 'Gri Kutu',
@@ -81,7 +79,7 @@ class WasteAnalysis {
       );
     }
 
-    if (c.contains('organik')) {
+    if (c.contains('organik') || c.contains('organic') || c.contains('food')) {
       return const WasteAnalysis(
         title: 'Organik Atık',
         binColor: 'Kahverengi Kutu',
@@ -94,7 +92,7 @@ class WasteAnalysis {
       );
     }
 
-    if (c.contains('pil')) {
+    if (c.contains('pil') || c.contains('battery')) {
       return const WasteAnalysis(
         title: 'Pil Atığı',
         binColor: 'Atık Pil Kutusu',
@@ -108,7 +106,7 @@ class WasteAnalysis {
       );
     }
 
-    if (c.contains('elektronik')) {
+    if (c.contains('elektronik') || c.contains('electronic')) {
       return const WasteAnalysis(
         title: 'Elektronik Atık',
         binColor: 'E-Atık Kutusu',
@@ -119,6 +117,20 @@ class WasteAnalysis {
         decomposition: 'Çok uzun',
         recycleRate: 'Özel işlem gerekir',
         hazardLevel: 'Orta',
+      );
+    }
+
+    if (c.contains('yag') || c.contains('oil') || c.contains('yağ')) {
+      return const WasteAnalysis(
+        title: 'Atık Yağ',
+        binColor: 'Atık Yağ Kutusu',
+        binName: 'Atık Yağ Toplama Kutusu',
+        binDescription:
+            'Bu atık lavaboya dökülmemeli, atık yağ toplama noktasına teslim edilmelidir.',
+        material: 'Yağ',
+        decomposition: 'Çok uzun',
+        recycleRate: 'Özel işlem gerekir',
+        hazardLevel: 'Yüksek',
       );
     }
 
@@ -138,55 +150,30 @@ class WasteAnalysis {
 
 Future<WasteAnalysis> analyzeWasteImage(XFile image) async {
   final bytes = await image.readAsBytes();
-  final base64Image = base64Encode(bytes);
 
-  final fileName = image.name.toLowerCase();
-  String mimeType = 'image/jpeg';
+  // Android emülatörde 10.0.2.2, gerçek telefonda bilgisayarının IP'si olmalı
+  final uri = Uri.parse('https://sandbag-sandbox-ember.ngrok-free.dev/analyze');
 
-  if (fileName.endsWith('.png')) {
-    mimeType = 'image/png';
-  } else if (fileName.endsWith('.webp')) {
-    mimeType = 'image/webp';
-  }
-
-  final url = Uri.parse(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$geminiApiKey',
+  final request = http.MultipartRequest('POST', uri);
+  request.files.add(
+    http.MultipartFile.fromBytes(
+      'file',
+      bytes,
+      filename: image.name,
+    ),
   );
 
-  final response = await http.post(
-    url,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: jsonEncode({
-      'contents': [
-        {
-          'parts': [
-            {
-              'text':
-                  'Bu fotoğraftaki atığı analiz et. Sadece şu kategorilerden birini yaz: Plastik, Kağıt, Cam, Metal, Organik, Elektronik, Pil, Genel Atık. Açıklama yazma. Sadece kategori adı yaz.',
-            },
-            {
-              'inlineData': {
-                'mimeType': mimeType,
-                'data': base64Image,
-              }
-            }
-          ]
-        }
-      ]
-    }),
-  );
+  final response = await request.send();
+  final responseBody = await response.stream.bytesToString();
 
   if (response.statusCode != 200) {
-    throw Exception('Gemini API hatası: ${response.body}');
+    throw Exception('Backend hatası: $responseBody');
   }
 
-  final data = jsonDecode(response.body);
-  final text =
-      data['candidates']?[0]?['content']?['parts']?[0]?['text'] ?? 'Genel Atık';
+  final data = jsonDecode(responseBody);
+  final kategori = data['kategori'] ?? 'Genel Atık';
 
-  return WasteAnalysis.fromCategory(text.toString());
+  return WasteAnalysis.fromCategory(kategori);
 }
 
 Future<void> pickAndAnalyzeWaste(
@@ -272,7 +259,7 @@ Future<void> pickAndAnalyzeWaste(
           borderRadius: BorderRadius.circular(16),
         ),
         content: const Text(
-          'AI analiz kotası dolu veya bağlantı hatası oluştu. Lütfen daha sonra tekrar deneyin.',
+          'Backend bağlantı hatası. Backend çalışıyor mu kontrol edin.',
           style: TextStyle(
             color: AppColors.textWhite,
           ),
@@ -329,6 +316,7 @@ class AppColors {
     if (c.contains('yeşil')) return glass;
     if (c.contains('kahverengi')) return brown;
     if (c.contains('pil')) return red;
+    if (c.contains('yağ')) return const Color(0xFFFFB347);
     if (c.contains('e-atık')) return const Color(0xFFB084FF);
     return gray;
   }
